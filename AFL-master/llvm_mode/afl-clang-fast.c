@@ -40,35 +40,37 @@
 #include <stdlib.h>
 #include <string.h>
 
-static u8*  obj_path;               /* Path to runtime libraries         */
-static u8** cc_params;              /* Parameters passed to the real CC  */
-static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
-
+static u8 *obj_path;       /* Path to runtime libraries         */
+static u8 **cc_params;     /* Parameters passed to the real CC  */
+static u32 cc_par_cnt = 1; /* Param count, including argv0      */
 
 /* Try to find the runtime libraries. If that fails, abort. */
 
-static void find_obj(u8* argv0) {
+static void find_obj(u8 *argv0)
+{
 
   u8 *afl_path = getenv("AFL_PATH");
   u8 *slash, *tmp;
 
-  if (afl_path) {
+  if (afl_path)
+  {
 
     tmp = alloc_printf("%s/afl-llvm-rt.o", afl_path);
 
-    if (!access(tmp, R_OK)) {
+    if (!access(tmp, R_OK))
+    {
       obj_path = afl_path;
       ck_free(tmp);
       return;
     }
 
     ck_free(tmp);
-
   }
 
   slash = strrchr(argv0, '/');
 
-  if (slash) {
+  if (slash)
+  {
 
     u8 *dir;
 
@@ -78,7 +80,8 @@ static void find_obj(u8* argv0) {
 
     tmp = alloc_printf("%s/afl-llvm-rt.o", dir);
 
-    if (!access(tmp, R_OK)) {
+    if (!access(tmp, R_OK))
+    {
       obj_path = dir;
       ck_free(tmp);
       return;
@@ -86,37 +89,42 @@ static void find_obj(u8* argv0) {
 
     ck_free(tmp);
     ck_free(dir);
-
   }
 
-  if (!access(AFL_PATH "/afl-llvm-rt.o", R_OK)) {
+  if (!access(AFL_PATH "/afl-llvm-rt.o", R_OK))
+  {
     obj_path = AFL_PATH;
     return;
   }
 
   FATAL("Unable to find 'afl-llvm-rt.o' or 'afl-llvm-pass.so'. Please set AFL_PATH");
-
 }
-
 
 /* Copy argv to cc_params, making the necessary edits. */
 
-static void edit_params(u32 argc, char** argv) {
+static void edit_params(u32 argc, char **argv)
+{
 
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0;
   u8 *name;
 
-  cc_params = ck_alloc((argc + 128) * sizeof(u8*));
+  cc_params = ck_alloc((argc + 128) * sizeof(u8 *));
 
   name = strrchr(argv[0], '/');
-  if (!name) name = argv[0]; else name++;
+  if (!name)
+    name = argv[0];
+  else
+    name++;
 
-  if (!strcmp(name, "afl-clang-fast++")) {
-    u8* alt_cxx = getenv("AFL_CXX");
-    cc_params[0] = alt_cxx ? alt_cxx : (u8*)"clang++";
-  } else {
-    u8* alt_cc = getenv("AFL_CC");
-    cc_params[0] = alt_cc ? alt_cc : (u8*)"clang";
+  if (!strcmp(name, "afl-clang-fast++"))
+  {
+    u8 *alt_cxx = getenv("AFL_CXX");
+    cc_params[0] = alt_cxx ? alt_cxx : (u8 *)"clang++";
+  }
+  else
+  {
+    u8 *alt_cc = getenv("AFL_CC");
+    cc_params[0] = alt_cc ? alt_cc : (u8 *)"clang";
   }
 
   /* There are two ways to compile afl-clang-fast. In the traditional mode, we
@@ -141,39 +149,48 @@ static void edit_params(u32 argc, char** argv) {
 
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
-  while (--argc) {
-    u8* cur = *(++argv);
+  while (--argc)
+  {
+    u8 *cur = *(++argv);
 
-    if (!strcmp(cur, "-m32")) bit_mode = 32;
-    if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
-    if (!strcmp(cur, "-m64")) bit_mode = 64;
+    if (!strcmp(cur, "-m32"))
+      bit_mode = 32;
+    if (!strcmp(cur, "armv7a-linux-androideabi"))
+      bit_mode = 32;
+    if (!strcmp(cur, "-m64"))
+      bit_mode = 64;
 
-    if (!strcmp(cur, "-x")) x_set = 1;
+    if (!strcmp(cur, "-x"))
+      x_set = 1;
 
     if (!strcmp(cur, "-fsanitize=address") ||
-        !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
+        !strcmp(cur, "-fsanitize=memory"))
+      asan_set = 1;
 
-    if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
+    if (strstr(cur, "FORTIFY_SOURCE"))
+      fortify_set = 1;
 
     if (!strcmp(cur, "-Wl,-z,defs") ||
-        !strcmp(cur, "-Wl,--no-undefined")) continue;
+        !strcmp(cur, "-Wl,--no-undefined"))
+      continue;
 
     cc_params[cc_par_cnt++] = cur;
-
   }
 
-  if (getenv("AFL_HARDEN")) {
+  if (getenv("AFL_HARDEN"))
+  {
 
     cc_params[cc_par_cnt++] = "-fstack-protector-all";
 
     if (!fortify_set)
       cc_params[cc_par_cnt++] = "-D_FORTIFY_SOURCE=2";
-
   }
 
-  if (!asan_set) {
+  if (!asan_set)
+  {
 
-    if (getenv("AFL_USE_ASAN")) {
+    if (getenv("AFL_USE_ASAN"))
+    {
 
       if (getenv("AFL_USE_MSAN"))
         FATAL("ASAN and MSAN are mutually exclusive");
@@ -183,8 +200,9 @@ static void edit_params(u32 argc, char** argv) {
 
       cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
       cc_params[cc_par_cnt++] = "-fsanitize=address";
-
-    } else if (getenv("AFL_USE_MSAN")) {
+    }
+    else if (getenv("AFL_USE_MSAN"))
+    {
 
       if (getenv("AFL_USE_ASAN"))
         FATAL("ASAN and MSAN are mutually exclusive");
@@ -194,9 +212,7 @@ static void edit_params(u32 argc, char** argv) {
 
       cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
       cc_params[cc_par_cnt++] = "-fsanitize=memory";
-
     }
-
   }
 
 #ifdef USE_TRACE_PC
@@ -206,22 +222,22 @@ static void edit_params(u32 argc, char** argv) {
 
 #endif /* USE_TRACE_PC */
 
-  if (!getenv("AFL_DONT_OPTIMIZE")) {
+  if (!getenv("AFL_DONT_OPTIMIZE"))
+  {
 
     cc_params[cc_par_cnt++] = "-g";
     cc_params[cc_par_cnt++] = "-O3";
     cc_params[cc_par_cnt++] = "-funroll-loops";
-
   }
 
-  if (getenv("AFL_NO_BUILTIN")) {
+  if (getenv("AFL_NO_BUILTIN"))
+  {
 
     cc_params[cc_par_cnt++] = "-fno-builtin-strcmp";
     cc_params[cc_par_cnt++] = "-fno-builtin-strncmp";
     cc_params[cc_par_cnt++] = "-fno-builtin-strcasecmp";
     cc_params[cc_par_cnt++] = "-fno-builtin-strncasecmp";
     cc_params[cc_par_cnt++] = "-fno-builtin-memcmp";
-
   }
 
   cc_params[cc_par_cnt++] = "-D__AFL_HAVE_MANUAL_CONTROL=1";
@@ -249,80 +265,81 @@ static void edit_params(u32 argc, char** argv) {
    */
 
   cc_params[cc_par_cnt++] = "-D__AFL_LOOP(_A)="
-    "({ static volatile char *_B __attribute__((used)); "
-    " _B = (char*)\"" PERSIST_SIG "\"; "
+                            "({ static volatile char *_B __attribute__((used)); "
+                            " _B = (char*)\"" PERSIST_SIG "\"; "
 #ifdef __APPLE__
-    "__attribute__((visibility(\"default\"))) "
-    "int _L(unsigned int) __asm__(\"___afl_persistent_loop\"); "
+                            "__attribute__((visibility(\"default\"))) "
+                            "int _L(unsigned int) __asm__(\"___afl_persistent_loop\"); "
 #else
-    "__attribute__((visibility(\"default\"))) "
-    "int _L(unsigned int) __asm__(\"__afl_persistent_loop\"); "
+                            "__attribute__((visibility(\"default\"))) "
+                            "int _L(unsigned int) __asm__(\"__afl_persistent_loop\"); "
 #endif /* ^__APPLE__ */
-    "_L(_A); })";
+                            "_L(_A); })";
 
   cc_params[cc_par_cnt++] = "-D__AFL_INIT()="
-    "do { static volatile char *_A __attribute__((used)); "
-    " _A = (char*)\"" DEFER_SIG "\"; "
+                            "do { static volatile char *_A __attribute__((used)); "
+                            " _A = (char*)\"" DEFER_SIG "\"; "
 #ifdef __APPLE__
-    "__attribute__((visibility(\"default\"))) "
-    "void _I(void) __asm__(\"___afl_manual_init\"); "
+                            "__attribute__((visibility(\"default\"))) "
+                            "void _I(void) __asm__(\"___afl_manual_init\"); "
 #else
-    "__attribute__((visibility(\"default\"))) "
-    "void _I(void) __asm__(\"__afl_manual_init\"); "
+                            "__attribute__((visibility(\"default\"))) "
+                            "void _I(void) __asm__(\"__afl_manual_init\"); "
 #endif /* ^__APPLE__ */
-    "_I(); } while (0)";
+                            "_I(); } while (0)";
 
-  if (x_set) {
+  if (x_set)
+  {
     cc_params[cc_par_cnt++] = "-x";
     cc_params[cc_par_cnt++] = "none";
   }
 
 #ifndef __ANDROID__
-  switch (bit_mode) {
+  switch (bit_mode)
+  {
 
-    case 0:
-      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt.o", obj_path);
-      break;
+  case 0:
+    cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt.o", obj_path);
+    break;
 
-    case 32:
-      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt-32.o", obj_path);
+  case 32:
+    cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt-32.o", obj_path);
 
-      if (access(cc_params[cc_par_cnt - 1], R_OK))
-        FATAL("-m32 is not supported by your compiler");
+    if (access(cc_params[cc_par_cnt - 1], R_OK))
+      FATAL("-m32 is not supported by your compiler");
 
-      break;
+    break;
 
-    case 64:
-      cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt-64.o", obj_path);
+  case 64:
+    cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt-64.o", obj_path);
 
-      if (access(cc_params[cc_par_cnt - 1], R_OK))
-        FATAL("-m64 is not supported by your compiler");
+    if (access(cc_params[cc_par_cnt - 1], R_OK))
+      FATAL("-m64 is not supported by your compiler");
 
-      break;
-
+    break;
   }
 #endif
 
   cc_params[cc_par_cnt] = NULL;
-
 }
-
 
 /* Main entry point */
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv)
+{
 
-  if (isatty(2) && !getenv("AFL_QUIET")) {
+  if (isatty(2) && !getenv("AFL_QUIET"))
+  {
 
 #ifdef USE_TRACE_PC
-    SAYF(cCYA "afl-clang-fast [tpcg] " cBRI VERSION  cRST " by <lszekeres@google.com>\n");
+    SAYF(cCYA "afl-clang-fast [tpcg] " cBRI VERSION cRST " by <lszekeres@google.com>\n");
 #else
-    SAYF(cCYA "afl-clang-fast " cBRI VERSION  cRST " by <lszekeres@google.com>\n");
+    SAYF(cCYA "afl-clang-fast " cBRI VERSION cRST " by <lszekeres@google.com>\n");
 #endif /* ^USE_TRACE_PC */
-
   }
 
-  if (argc < 2) {
+  if (argc < 2)
+  {
 
     SAYF("\n"
          "This is a helper application for afl-fuzz. It serves as a drop-in replacement\n"
@@ -340,9 +357,7 @@ int main(int argc, char** argv) {
          BIN_PATH, BIN_PATH);
 
     exit(1);
-
   }
-
 
 #ifndef __ANDROID__
   find_obj(argv[0]);
@@ -350,10 +365,9 @@ int main(int argc, char** argv) {
 
   edit_params(argc, argv);
 
-  execvp(cc_params[0], (char**)cc_params);
+  execvp(cc_params[0], (char **)cc_params);
 
   FATAL("Oops, failed to execute '%s' - check your PATH", cc_params[0]);
 
   return 0;
-
 }
